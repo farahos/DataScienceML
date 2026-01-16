@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ProductPredictor | Smart Retail Analytics</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  {# Jinja2 template for Flask - uses 'group_models' and 'rev_models' passed from app.py #}
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>ProductPredictor | Smart Retail Analytics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+      .animate-fadeIn { animation: fadeIn 0.6s ease-out; }
+    </style>
+  </head>
+  <body class="min-h-screen flex flex-col bg-gradient-to-br from-indigo-100 via-purple-100 to-white">
+
+    <header class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <h1 class="text-2xl font-bold">🛍️ ProductPredictor</h1>
+        <p class="text-sm">Smart Retail Analytics</p>
+      </div>
+    </header>
+
+    <main class="flex-1 flex items-center justify-center p-8">
+      <div class="flex flex-col md:flex-row items-start justify-center gap-10 w-full max-w-6xl">
+
+        <div class="bg-gradient-to-b from-indigo-50 to-blue-100 rounded-3xl shadow-2xl border border-indigo-200 w-full md:w-1/2 p-8">
+          <h2 class="text-2xl font-bold text-indigo-800 mb-3">📊 Product Prediction</h2>
+          <p class="text-gray-600 mb-6">Enter product details and choose predictors to get insights for your business.</p>
+
+
+          <form id="predictForm" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Net Revenue</label>
+              <input type="number" step="0.01" name="NetRevenue" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Net Quantity</label>
+              <input type="number" step="1" name="NetQuantity" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Num Transactions</label>
+              <input type="number" name="NumTransactions" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Unique Customers</label>
+              <input type="number" name="NumUniqueCustomers" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Revenue (Last Month)</label>
+              <input type="number" step="0.01" name="NetRevenue_LastMonth" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Revenue (MA3)</label>
+              <input type="number" step="0.01" name="NetRevenue_MA3" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Month</label>
+              <input type="number" min="1" max="12" name="Month" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Product Frequency</label>
+              <input type="number" name="ProductFrequency" required class="w-full px-3 py-2 border rounded-lg">
+            </div>
+            <!-- Move dropdowns below the numeric inputs for better flow -->
+            <div class="sm:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Group Model</label>
+                <select id="groupModel" class="w-full px-3 py-2 border rounded-lg bg-white text-gray-800 font-medium shadow-sm">
+                  {% for val, label in group_models %}
+                    <option value="{{ val }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Revenue Model</label>
+                <select id="revModel" class="w-full px-3 py-2 border rounded-lg bg-white text-gray-800 font-medium shadow-sm">
+                  {% for val, label in rev_models %}
+                    <option value="{{ val }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="sm:col-span-2">
+              <button id="predictBtn" type="submit" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold rounded-full shadow-lg transform transition-transform active:scale-95">🚀 Predict Now</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="result" class="w-full md:w-1/2 bg-gradient-to-br from-white via-purple-50 to-indigo-100 rounded-3xl shadow-2xl p-8">
+          <h2 class="text-2xl font-bold text-indigo-800 mb-4">Prediction Result</h2>
+          <div id="resultContent" class="text-center bg-white/80 rounded-2xl p-6">Waiting for your input...</div>
+          <canvas id="revenueChart" class="mt-6 w-full max-w-md h-48 hidden"></canvas>
+        </div>
+
+      </div>
+    </main>
+
+    <script>
+      document.getElementById('predictForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        // Robust numeric parsing: convert to number, fallback to 0 if invalid
+        for (let k in data) {
+          const v = parseFloat(data[k]);
+          data[k] = Number.isFinite(v) ? v : 0;
+        }
+
+        const groupModel = document.getElementById('groupModel').value;
+        const revModel = document.getElementById('revModel').value;
+
+        const res = await fetch(`/predict_all?group_model=${groupModel}&rev_model=${revModel}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+
+        const resultDiv = document.getElementById('resultContent');
+        const chartCanvas = document.getElementById('revenueChart');
+        chartCanvas.classList.add('hidden');
+
+        if (res.ok) {
+          const json = await res.json();
+          // prefer canonical keys, fall back to older keys for compatibility
+          const models = json.models || json.Models || [];
+          const groupName = json.product_group || json.cluster_name || json.Group || 'Unknown';
+          const business = json.business || json.description || json.sharaxaad || '';
+          const predictedRevenue = json.next_month_revenue || json.next_month_revenue_formatted || json.NextMonthRevenue || '$0.00';
+
+          resultDiv.innerHTML = `<div class="space-y-3 animate-fadeIn text-left">
+              <p><strong>Product Group:</strong> ${groupName}</p>
+              <p><strong>Description:</strong> ${business}</p>
+              <p><strong>Recommendation:</strong> ${json.recommended_action || ''}</p>
+              <p class="text-lg font-bold mt-3">Predicted Revenue: ${predictedRevenue}</p>
+            </div>`;
+
+          // show chart if NetRevenue_LastMonth exists — update existing chart if present
+          if (data.NetRevenue_LastMonth !== undefined) {
+            const lastVal = Number(data.NetRevenue_LastMonth) || 0;
+            const predVal = parseFloat(String(predictedRevenue).replace(/[^0-9.-]+/g, '')) || 0;
+            chartCanvas.classList.remove('hidden');
+
+            // Use a global chart instance so we can update without recreating the chart
+            if (window.revenueChartInstance) {
+              window.revenueChartInstance.data.labels = ['Last Month Revenue', 'Predicted Revenue'];
+              window.revenueChartInstance.data.datasets[0].data = [lastVal, predVal];
+              window.revenueChartInstance.update();
+            } else {
+              const ctx = chartCanvas.getContext('2d');
+              window.revenueChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                  labels: ['Last Month Revenue', 'Predicted Revenue'],
+                  datasets: [{
+                    label: 'Revenue',
+                    data: [lastVal, predVal],
+                    backgroundColor: ['#6366f1', '#8b5cf6']
+                  }]
+                },
+                options: {
+                  plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true } }
+                }
+              });
+            }
+          }
+        } else {
+          const err = await res.json().catch(()=>({error:'unknown'}));
+          resultDiv.innerHTML = `<p class="text-red-600 font-semibold">Error: ${err.error || err.qalad || JSON.stringify(err)}</p>`;
+        }
+      });
+    </script>
+    
+    <!-- Footer -->
+    <footer class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white mt-8">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex flex-col md:flex-row items-center justify-between text-sm">
+        <div class="mb-2 md:mb-0">© 2025 ProductPredictor. All rights reserved.</div>
+        <div class="flex gap-4">
+          <a href="#" class="text-white/90 hover:text-white">Privacy</a>
+          <a href="#" class="text-white/90 hover:text-white">Terms</a>
+          <a href="#" class="text-white/90 hover:text-white">Contact</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+  </html>
